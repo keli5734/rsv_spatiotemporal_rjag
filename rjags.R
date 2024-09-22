@@ -4,7 +4,7 @@ rm(list=ls())
 # setwd("~/OneDrive - Yale University/RSV/CAR/20000 iter/data")
 # READ DATA
 NYwide<- readRDS("NYwide.rds") # monthly time series of observed RSV hospitalizations from each age group in NY
-nyunder5 <- readRDS("nyunder5.rds") #offset term, population for each age group in NY (?matrix)
+nyunder5 <- readRDS("nyunder5.rds") #offset term, population for each age group in the area (?matrix)
 reporting_fraction <- readRDS("reporting_fraction.rds") # offset term, recording rates for each age group in NY (?matrix)
 
 #################################################################

@@ -29,8 +29,7 @@ library(tidyr)
 
 # aggregated data for 9 counties in NY 
 # Rockland, Westchester, Bronx, New York, Richmond, Kings, Queens, Nassau, Suffolk 
-
-
+# 4 AGE group: under 5, 5-19, 20-59, 60 above
 
 ny_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/spatiotemporal_RSV/subset_data_ny.rds")
 
@@ -152,35 +151,46 @@ observation2 <- observation %>%
 
 observed_data <- as.matrix(observation2)
 
-#saveRDS(observed_data, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/NYwide.rds")
+#saveRDS(observed_data, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/data/NYwide.rds")
 
 
 
 
-########## get population offset ###########
+########## get population size as offset ###########
 
-standard_popluation <- readxl::read_xlsx(path = "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/US_2020_population_standarded.xlsx", sheet = "Data")  %>% 
-  mutate(AGE = unique(sort(ny_data$AGE_GROUP))) %>% 
-  rename("AGE_GROUP" = "AGE",
-         "Fraction" = "Percentage",
-         "Population" = "Population") %>% 
+source("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/spatiotemporal_RSV/age_distribution_county_level.R")
+
+age_distribution_by_county <- age_distribution_by_county_summary %>% 
   mutate(AGE_GROUP2 = ifelse(AGE_GROUP %in% c("under 5"), "under 5", 
                              ifelse(AGE_GROUP %in% c("5-9", "10-14", "15-19"), "5-19", 
-                                    ifelse(AGE_GROUP %in% c("20-24", "25-29", "30-34", "35-39"), "20-39", 
-                                           ifelse(AGE_GROUP %in% c("40-44", "45-49", "50-54", "55-59"), "40-59", "60 above")))))  %>% 
-  group_by(AGE_GROUP2) %>% 
-  summarise(Fraction = sum(Fraction), 
-            Population = sum(Population))  %>% 
-  rename("AGE_GROUP" = "AGE_GROUP2",
-         "Fraction" = "Fraction",
-         "Population" = "Population")  %>% 
+                                    ifelse(AGE_GROUP %in% c("20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59"), "20-59", "60 above")))) %>% 
+  select(-AGE_GROUP) %>% 
+  rename("county_name" = "county_name",
+         "population" = "population",
+         "AGE_GROUP" = "AGE_GROUP2") %>% 
   mutate(AGE_GROUP = factor(AGE_GROUP, 
-                            levels = c("under 5", "5-19", "20-39", "40-59", "60 above"))) %>% 
-  arrange(AGE_GROUP)
+                            levels = c("under 5", "5-19", "20-59", "60 above"))) %>% 
+  group_by(county_name, AGE_GROUP) %>% 
+  summarise(population = sum(population)) %>% 
+  arrange(AGE_GROUP) %>% 
+  filter(county_name %in% selected_counties)
+
+age_distribution <- age_distribution_by_county %>% 
+  group_by(AGE_GROUP) %>% 
+  summarise(population = sum(population)) %>% 
+  ungroup()
 
 
-AGE_GROUP <- sort(unique(ny_data$AGE_GROUP2))
-Fraction <- standard_popluation$Fraction
+### construct T x G matrix for rjags 
 
+N_month <- length(all_dates)
+N_agegroup <- length(AGE_GROUP)
 
+nypopulation <- matrix(0, nrow = N_month, ncol = N_agegroup)
 
+for(i in 1:N_agegroup){
+nypopulation[,i] = rep(age_distribution$population[i], N_month)
+}
+colnames(nypopulation) <- age_distribution$AGE_GROUP
+
+#saveRDS(nypopulation, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/data/nypopulation.rds")

@@ -44,16 +44,18 @@ model {
   # Initialize the model
   model <- jags.model(textConnection(model_string),
                       data = dataset,
-                      n.chains = 4)
+                      n.chains = 5)
   
   # Burn-in phase
   update(model, n.iter = n)
   
+  trans_variables <- paste0("trans[", 1:4, "]")
+  
   # Posterior sampling
-  modelresult <- coda.samples(model, variable.names = c("trans"), thin = 10, n.iter = m)
+  modelresult <- coda.samples(model, variable.names = trans_variables, thin = 10, n.iter = m)
   
   # Convert results to a dataframe
-  result <- as.data.frame(modelresult[[4]])
+  result <- as.data.frame(modelresult[[5]])
   
   model.results <<- modelresult
   # Store result in a global variable

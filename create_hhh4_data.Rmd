@@ -1,0 +1,685 @@
+---
+title: "hhh4_data"
+author: "Ke Li"
+date: "2024-09-23"
+output: html_document
+---
+
+```{r, load packages, warning=FALSE}
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(tigris)
+library(viridisLite)
+library(zctaCrosswalk)
+library(zipcodeR)
+library(spatstat)
+library(spdep)
+ 
+ library(arrow)
+ 
+ 
+library(spatstat)
+
+library(usmap)
+library(scales)
+#library(spatstat)
+
+vircol <-  viridis_pal()(100)
+
+library(duckdb)
+library(plotly)
+library(lubridate)
+ 
+
+```
+
+ 
+ 
+ 
+ 
+ 
+```{r, constructing hhh4 sts, warning = F}
+library(tidyverse)
+library(tigris)
+library(sf)
+library(zctaCrosswalk)
+library(spatstat)
+library(hhh4contacts)
+library(zipcodeR)
+
+
+ny_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/spatiotemporal_RSV/subset_data_ny.rds")
+
+
+ny_data_count_zip <- ny_data %>% 
+  mutate(AGE_GROUP = ifelse(AGE_GROUP2 %in% c("20-39", "40-59"), "20-59", 
+                            ifelse(AGE_GROUP2 == "under 5", "under 5", 
+                                   ifelse(AGE_GROUP2 == "5-19", "5-19", 
+                                          ifelse(AGE_GROUP2 == "60 above", "60 above", NA))))) %>% 
+  mutate(AGE_GROUP = factor(AGE_GROUP, levels = c("under 5", "5-19", "20-59", "60 above"))) %>% 
+  mutate(total = ifelse(c(rsv == 1 | rsv_prim == 1), 1, 0)) %>% 
+  select(zip, AGE_GROUP, AGE_GROUP2, season, date, total) %>% 
+  filter(!is.na(season)) %>% 
+  filter(season %in% c("2004/05", "2005/06", "2006/07", "2007/08", "2008/09", "2009/10", "2010/11", "2011/12",   "2012/13", "2013/14")) %>% 
+  group_by(date, zip, AGE_GROUP) %>% 
+  summarise(N = sum(total))  %>% 
+  ungroup() %>% 
+  filter(!is.na(zip))
+
+
+
+
+
+{
+options(tigris_use_cache = TRUE)
+# Get ZIP code shapefile for New York
+ny_zips <- zctas(state = "NY", year = 2010) # Geographic information for NY
+
+
+# zcta_pop <- readRDS('/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/NY_pop_2019.RDS') %>%
+#   select(GEOID, population = estimate) %>%
+#   rename(ZCTA5CE10 = GEOID) # give population for the ZIP code level
+
+
+
+ZIP_COUNTY <- get_zcta_crosswalk() %>% 
+  filter(state_fips == "36") %>% 
+  select(-state_fips) %>% 
+  group_by(zcta) %>%
+  #slice_head(n = 1) %>% # remove multiple entries of ZIPs
+  ungroup()
+
+zip_multiple_counties <- ZIP_COUNTY %>%
+  group_by(zcta) %>%
+  summarise(n_counties = n_distinct(county_name)) %>%
+  filter(n_counties > 1) %>%
+  pull(zcta)
+
+ZIP_COUNTY <- ZIP_COUNTY %>%
+  filter(!zcta %in% zip_multiple_counties) %>% 
+  select(-county_fips)
+
+# Get county information
+zip_info <- reverse_zipcode(zip_multiple_counties)
+
+# Extract the county name
+unique_zip_county <- data.frame(zcta = zip_info$zipcode,
+                                county_name = zip_info$county)
+
+ZIP_COUNTY <- rbind(ZIP_COUNTY, unique_zip_county)
+
+
+merged_zip_county_data <- merge(ZIP_COUNTY, ny_data_count_zip, 
+                                by.x = "zcta", by.y = "zip")
+
+}
+
+selected_counties <- paste0(c("New York", "Rockland", "Westchester", "Bronx", 
+                              "Richmond", "Kings", "Queens", "Nassau", "Suffolk"), " County")
+
+
+case_by_county_age <- merged_zip_county_data %>% 
+  group_by(county_name, date, AGE_GROUP) %>% 
+  summarise(N = sum(N)) %>% 
+  ungroup() %>% 
+  filter(county_name %in% selected_counties)
+
+ 
+all_dates <- seq.Date(from = as.Date("2004-07-01"), to = as.Date("2014-06-30"), by = "month")
+
+# Get unique regions from the original dataframe
+county_names <- unique(case_by_county_age$county_name)
+AGE_GROUP <- unique(case_by_county_age$AGE_GROUP)
+
+names(case_by_county_age) <- c("County", "Date", "AGE_GROUP", "N")
+ 
+# Create a data frame with all combinations of dates and regions
+full_data <- expand.grid(Date = all_dates, County = county_names, AGE_GROUP = AGE_GROUP)
+
+ 
+observation <- merge(
+  full_data,
+  case_by_county_age,
+  by = c("AGE_GROUP", "County", "Date"),
+  all.x = TRUE
+)
+
+
+observation$N[is.na(observation$N)] <- 0
+
+ 
+observation2 <- observation %>% 
+  mutate(County = gsub(" County", "", County)) %>% 
+  mutate(county_age_group = paste0(County, "_", AGE_GROUP)) %>% 
+  select(county_age_group, Date, N) %>% 
+  pivot_wider(names_from = county_age_group, values_from = N, values_fill = list(N = 0)) %>% 
+  dplyr::select(-Date) 
+
+
+
+observed_data <- as.matrix(observation2)
+ 
+#saveRDS(observed_data, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/observed_data_county_NY_state.rds")
+ 
+ 
+```
+
+
+```{r,create negb matrix,  warning=FALSE}
+
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(tigris)
+library(viridisLite)
+library(zctaCrosswalk)
+library(zipcodeR)
+library(spatstat)
+library(spdep)
+library(geosphere)
+
+observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/observed_data_county_NY_state.rds")
+
+ 
+# test <- readRDS("geo_info_NY_state.rds")
+# # Calculate centroids of the counties
+# centroids <- st_centroid(test)
+# # Extract coordinates of centroids
+# centroid_coords <- st_coordinates(centroids)
+# # Calculate distance matrix between all county centroids (in meters)
+# distance_matrix <- distm(centroid_coords, fun = distHaversine)
+# # Convert distances to inverse weights (optional)
+# weight_matrix <- 1 / distance_matrix
+# weight_matrix[is.infinite(weight_matrix)] <- 0  # Handle infinite values (same county)
+#  
+# colnames(weight_matrix) <-  unique(observation$county_name)
+# rownames(weight_matrix) <- unique(observation$county_name)
+
+# saveRDS(weight_matrix, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
+
+
+original_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
+
+ 
+
+selected_counties <- paste0(c("Bronx", "Kings", "Nassau", "New York", 
+                              "Queens", "Richmond", "Rockland", "Suffolk", "Westchester"), " County")
+
+selected_matrix <- original_matrix[selected_counties, selected_counties]
+
+
+# Assuming your original matrix is `original_matrix`
+# Initialize an empty expanded matrix
+n_counties <- length(selected_counties)
+n_age_groups <- 4
+expanded_matrix <- matrix(0, n_counties * n_age_groups, n_counties * n_age_groups)
+
+# 5 age groups x 62 counties 
+
+# Fill in the expanded matrix
+for (i in 1:n_counties) {
+  for (j in 1:n_counties) {
+    # Get the value from the original matrix
+    value <- selected_matrix[i, j]
+    
+    # Define the corresponding blocks in the expanded matrix
+    for (age1 in 1:n_age_groups) {
+      for (age2 in 1:n_age_groups) {
+        row_pos <- (age1 - 1) * n_counties + i
+        col_pos <- (age2 - 1) * n_counties + j
+        
+        # Fill the block with the value from the original matrix
+        expanded_matrix[row_pos, col_pos] <- value
+      }
+    }
+  }
+}
+# Your expanded matrix now contains the 18x18 blocks
+
+colnames(expanded_matrix) <- colnames(observed_data)
+rownames(expanded_matrix) <- colnames(observed_data)
+
+
+# saveRDS(expanded_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/expanded_negb_matrix_distance_weights_NY_state.rds")
+
+```
+
+
+```{r,create population fraction,  warning=FALSE}
+# 120 * 310 matrix 
+library(tidycensus)
+library(tidyverse)
+# # Load ACS variables for a specific year (2019, for example)
+# v <- load_variables(2022, "acs5", cache = TRUE)
+# 
+# 
+# # Search for age-related variables
+# view(v)
+# rm(v)
+
+# Example: Retrieve age distribution data for NY counties
+age_data <- get_acs(
+  geography = "county",
+  variables = c(
+    #"B01001_001E",  # Total population
+    #"B01001_002E",  # Male population
+    #"B01001_026E",  # Female population
+    # Add other specific age group variables like B01001_003E, B01001_004E, etc.
+    "B01001_003",  # Male < 5 years
+    "B01001_004",  # Male 5-9
+    "B01001_005",  # Male 10-14  
+    "B01001_006",  # Male 15-17
+    "B01001_007",  # Male 18-19
+    "B01001_008",  # Male 20
+    "B01001_009",  # Male 21
+    "B01001_010",  # Male 22-24
+    "B01001_011",  # Male 25-29
+    "B01001_012",  # Male 30-34
+    "B01001_013",  # Male 35-39
+    "B01001_014",  # Male 40-44
+    "B01001_015",  # Male 45-49
+    "B01001_016",  # Male 50-54
+    "B01001_017",  # Male 55-59 
+    "B01001_018",  # Male 60-61
+    "B01001_019",  # Male 62-64
+    "B01001_020",  # Male 65-66
+    "B01001_021",  # Male 67-69
+    "B01001_022",  # Male 70-74
+    "B01001_023",  # Male 75-79
+    "B01001_024",  # Male 80-84
+    "B01001_025",  # Male >85
+    
+    "B01001_027",  # Female < 5 years
+    "B01001_028",  # Female 5-9
+    "B01001_029",  # Female 10-14  
+    "B01001_030",  # Female 15-17
+    "B01001_031",  # Female 18-19
+    "B01001_032",  # Female 20
+    "B01001_033",  # Female 21
+    "B01001_034",  # Female 22-24
+    "B01001_035",  # Female 25-29
+    "B01001_036",  # Female 30-34
+    "B01001_037",  # Female 35-39
+    "B01001_038",  # Female 40-44
+    "B01001_039",  # Female 45-49
+    "B01001_040",  # Female 50-54
+    "B01001_041",  # Female 55-59 
+    "B01001_042",  # Female 60-61
+    "B01001_043",  # Female 62-64
+    "B01001_044",  # Female 65-66
+    "B01001_045",  # Female 67-69
+    "B01001_046",  # Female 70-74
+    "B01001_047",  # Female 75-79
+    "B01001_048",  # Female 80-84
+    "B01001_049"  # Female >85
+  ),
+  state = "NY",
+  year = 2022,
+  survey = "acs5"
+)
+
+# View the result
+head(age_data)
+
+age_distribution_by_county <- age_data %>% 
+  mutate(AGE_GROUP = ifelse(variable %in% c("B01001_003", "B01001_027"), "under 5", 
+                            ifelse(variable %in% c("B01001_004", "B01001_028"), "5-9", 
+                                   ifelse(variable %in% c("B01001_005", "B01001_029"), "10-14", 
+                                          ifelse(variable %in% c("B01001_006", "B01001_030", "B01001_007", "B01001_031"), "15-19",
+                                                 ifelse(variable %in% c("B01001_008", "B01001_009", "B01001_010", "B01001_032", "B01001_033", "B01001_034"), "20-24",
+                                                        ifelse(variable %in% c("B01001_011", "B01001_035"), "25-29",
+                                                               ifelse(variable %in% c("B01001_012", "B01001_036"), "30-34",
+                                                                      ifelse(variable %in% c("B01001_013", "B01001_037"), "35-39",
+                                                                             ifelse(variable %in% c("B01001_014", "B01001_038"), "40-44",
+                                                                                    ifelse(variable %in% c("B01001_015", "B01001_039"), "45-49",
+                                                                                           ifelse(variable %in% c("B01001_016", "B01001_040"), "50-54",
+                                                                                                  ifelse(variable %in% c("B01001_017", "B01001_041"), "55-59",
+                                                                                                         ifelse(variable %in% c("B01001_018", "B01001_019", "B01001_042","B01001_043"), "60-64",
+                                                                                                                ifelse(variable %in% c("B01001_020", "B01001_021", "B01001_044","B01001_045"),"65-69",
+                                                                                                                       ifelse(variable %in% c("B01001_022", "B01001_046"), "70-74",
+                                                                                                                              ifelse(variable %in% c("B01001_023", "B01001_047"), "75-79", 
+                                                                                                                                     ifelse(variable %in% c("B01001_024", "B01001_048"), "80-84",
+                                                                                                                                            ifelse(variable %in% c("B01001_025", "B01001_049"), "85 above", NA))))))))))))))))))) %>% 
+  filter(!is.na(AGE_GROUP))
+
+
+GEOID_NAME <- age_distribution_by_county %>% select(GEOID, NAME)
+ 
+age_distribution_by_county_summary <- age_distribution_by_county %>% 
+  group_by(NAME, AGE_GROUP) %>% 
+  summarise(population = sum(estimate)) %>% 
+  ungroup() %>% 
+  mutate(AGE_GROUP = factor(AGE_GROUP, levels = c("under 5", 
+                                       "5-9", 
+                                       "10-14", 
+                                       "15-19", 
+                                       "20-24", 
+                                       "25-29",
+                                       "30-34",
+                                       "35-39",
+                                       "40-44",
+                                       "45-49",
+                                       "50-54",
+                                       "55-59",
+                                       "60-64",
+                                       "65-69",
+                                       "70-74",
+                                       "75-79",
+                                       "80-84",
+                                       "85 above")))  %>% 
+  mutate(NAME = gsub(", New York", "", NAME)) %>% 
+  arrange(AGE_GROUP) %>% 
+  mutate(AGE_GROUP = ifelse(AGE_GROUP %in% c("under 5"), "under 5", 
+                             ifelse(AGE_GROUP %in% c("5-9", "10-14", "15-19"), "5-19", 
+                                    ifelse(AGE_GROUP %in% c("20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59"), "20-59", "60 above")))) %>% 
+                                          
+  group_by(AGE_GROUP, NAME) %>% 
+  mutate(population = sum(population)) %>% 
+  ungroup() %>% 
+  mutate(AGE_GROUP = factor(AGE_GROUP, levels = c("under 5", 
+                                       "5-19", 
+                                       "20-59", 
+                                       "60 above")))  %>% 
+  arrange(AGE_GROUP)
+
+colnames(age_distribution_by_county_summary) <- c("county_name", "AGE_GROUP", "population")
+
+#head(age_distribution_by_county_summary)
+
+age_distribution_by_county_fraction <- age_distribution_by_county_summary %>% 
+  group_by(county_name) %>% 
+  mutate(fraction = population / sum(population)) %>% 
+  ungroup() %>% 
+  arrange(AGE_GROUP)
+
+
+observed_data <- readRDS( "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/observed_data_county_NY_state.rds")
+
+population_fraction_matrix <- matrix(0, nrow = dim(observed_data)[1], ncol = dim(observed_data)[2])
+population_estimate_matrix <- matrix(0, nrow = dim(observed_data)[1], ncol = dim(observed_data)[2])
+
+for(i in 1:dim(observed_data)[2]){
+  population_fraction_matrix[,i] = rep(age_distribution_by_county_fraction$fraction[i], dim(observed_data)[1])
+  population_estimate_matrix[,i] = rep(age_distribution_by_county_summary$population[i], dim(observed_data)[1])
+}
+
+colnames(population_fraction_matrix) <- colnames(observed_data)
+colnames(population_estimate_matrix) <- colnames(observed_data)
+
+
+
+# saveRDS(population_fraction_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_fraction_matrix_county_NY_state.rds")
+# saveRDS(population_estimate_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_estimate_matrix_county_NY_state.rds")
+
+ 
+```
+
+
+```{r, forming list, warning=FALSE}
+
+# Here we have 18 age groups
+observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/observed_data_county_NY_state.rds")
+ 
+
+AGE_GROUP = factor(c("under 5", 
+                                       "5-19", 
+                                       "20-39", 
+                                       "40-59", 
+                                       "60 above"), 
+                   levels = c("under 5", 
+                                       "5-19", 
+                                       "20-39", 
+                                       "40-59", 
+                                       "60 above"))
+
+
+# observed data 
+
+observed_list <- list()
+for(i in 1:length(AGE_GROUP)){
+selected_columns <- observed_data[, grep(paste0(AGE_GROUP[i],"$"), colnames(observed_data))]
+colnames(selected_columns) <- paste0(gsub(paste0("_",AGE_GROUP[i],"$"), "", colnames(selected_columns)), " County")
+
+observed_list[[i]] <- selected_columns
+}
+ 
+
+# negb_matrix 
+negb_matrix_age <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
+
+
+ 
+population_fraction_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_fraction_matrix_county_NY_state.rds")
+population_fraction_list <- list()
+for(i in 1:length(AGE_GROUP)){
+selected_columns <- population_fraction_matrix[, grep(paste0(AGE_GROUP[i],"$"), colnames(population_fraction_matrix))]
+colnames(selected_columns) <- paste0(gsub(paste0("_",AGE_GROUP[i],"$"), "", colnames(selected_columns)), " County")
+population_fraction_list[[i]] <- selected_columns
+}
+ 
+
+population_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_estimate_matrix_county_NY_state.rds")
+population_list <- list()
+for(i in 1:length(AGE_GROUP)){
+selected_columns <- population_matrix[, grep(paste0(AGE_GROUP[i],"$"), colnames(population_matrix))]
+colnames(selected_columns) <- paste0(gsub(paste0("_",AGE_GROUP[i],"$"), "", colnames(selected_columns)), " County")
+population_list[[i]] <- selected_columns
+}
+ 
+counties_names <-  colnames(population_list[[1]])
+
+
+map_input <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4/sts_map_county_level_NY_state.rds")
+row.names(map_input) <- counties_names
+map_input@data$County <- counties_names
+
+map_list <- list()
+for(i in 1:length(AGE_GROUP)){
+  map_input@data$population <- population_list[[i]][1,]
+  map_list[[i]] <- map_input
+}
+
+
+```
+
+
+
+```{r, create list of NGROUPS "sts" objects, warning=FALSE}
+
+epoch_vector <- seq(1:120)
+
+ny_data_rbyg <- list()
+
+# Loop through 1 to 18 to populate the list
+for (i in 1:length(AGE_GROUP)) {
+  ny_data_rbyg[[AGE_GROUP[i]]] <- sts(
+    observed = observed_list[[i]],
+    start = c(2004, 7),
+    frequency = 12,
+    epoch = epoch_vector,
+    map = map_list[[i]],
+    populationFrac = population_fraction_list[[i]],
+    neighbourhood = negb_matrix_age
+  )
+}
+names(ny_data_rbyg) <- AGE_GROUP
+
+negb_matrix_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/expanded_negb_matrix_distance_weights_NY_state.rds") # expanded
+population_estimate_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_estimate_matrix_county_NY_state.rds")
+
+ny_data_all <- sts(
+  observed = observed_data, 
+  start = c(2004, 7), 
+  frequency = 12, 
+  epoch = epoch_vector, 
+  populationFrac = population_estimate_matrix,
+  neighbourhood = negb_matrix_all
+)
+
+
+observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/observed_data_county_NY_state.rds")
+colnames(observed_data) <- paste0(colnames(observed_data), " County")
+
+populationFrac <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/population_fraction_matrix_county_NY_state.rds")
+population <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14//population_estimate_matrix_county_NY_state.rds")
+
+# # Assuming your original matrix is 'mat' (48x62)
+# populationFrac <- apply(populationFrac, 2, function(x) rep(x, each = 2, length.out = 120))
+# population <- apply(population, 2, function(x) rep(x, each = 2, length.out = 120))
+ 
+
+map_input <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/sts_map_county_level_NY_state.rds")
+row.names(map_input) <- colnames(observed_data)
+map_input@data$County <- colnames(observed_data)
+epoch_vector <- seq(1:120)
+neighborhood_mat <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/negb_matrix_distance_weights_NY_state.rds")
+
+ny_data_r <- sts(observed = observed_data,
+                     start = c(2004,7),
+                     frequency = 12,
+                     epoch = epoch_vector,
+                     map = map_input,
+                     populationFrac = populationFrac,
+                     #population = population,
+                     neighbourhood = neighborhood_mat
+                    )
+
+
+# saveRDS(ny_data_rbyg, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_rbyg.rds")
+# saveRDS(ny_data_all, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_all.rds")
+# saveRDS(ny_data_r, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_r.rds")
+
+```
+
+
+ 
+```{r, data visulize, warning= FALSE}
+library("hhh4contacts")
+
+ny_data_rbyg <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_rbyg.rds")
+ny_data_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_all.rds")
+ny_data_r <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_r.rds")
+
+AGE_GROUP <- names(ny_data_rbyg)
+
+
+ ## overall time series of counts
+ plot(ny_data_all, type = observed ~ time,
+      main = "Aggregated over all counties and age groups")
+ 
+ ## group-specific time series
+ {
+ par(mfrow = c(2,3), las = 1)
+ for (g in AGE_GROUP){
+   plot(ny_data_rbyg[[g]], type = observed ~ time, main = g, ylab = "No. hospitalizations")
+ }
+ }
+ ## district-specific time series
+plot(ny_data_r, units = which(colSums(observed(ny_data_r)) > 500))
+ 
+ 
+
+
+
+ ### plot disease incidence maps (mean yearly incidence)
+ pop2020 <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts/pop2020.rds")[,-1]
+ pop2020 <- tibble(`under 5` = pop2020$`under 5`, 
+                       `5-19` = pop2020$`5-9` + pop2020$`10-14` + pop2020$`15-19`, 
+                       `20-39` = pop2020$`20-24` + pop2020$`25-29` + pop2020$`30-34` + pop2020$`35-39`, 
+                       `40-59` = pop2020$`40-44` + pop2020$`45-49` + pop2020$`50-54` + pop2020$`55-59`, 
+                       `60 above` = sum(pop2020[,13:18]))
+ 
+ # AGE_GROUP = factor(c("under 5", 
+ #                                       "5-19", 
+ #                                       "20-39", 
+ #                                       "40-59", 
+ #                                       "60 above"), 
+ #                   levels = c("under 5", 
+ #                                       "5-19", 
+ #                                       "20-39", 
+ #                                       "40-59", 
+ #                                       "60 above"))
+ 
+ 
+ pop2020 <- as.matrix(pop2020)
+ rownames(pop2020) <- rownames(ny_data_r@neighbourhood)
+ 
+ (poprbyg <- aggregateCountsArray(pop2020, dim = 2, grouping = list(
+    "uner 5" = c("under 5"),
+    "5-19" = c("5-19"),
+    "20-59" = c("20-39", "40-59"),
+    "above 60" = c("60 above")
+)))
+ 
+ # Specify a custom order for the columns
+custom_order <- c("uner 5", "5-19", "20-59", "above 60")
+
+# Reorder columns based on the custom order
+poprbyg_ordered <- poprbyg[, custom_order]
+
+ ## overall map
+ scalebar <- layout.scalebar(ny_data_rbyg[[1]]@map, corner = c(0.7, 0.9),
+                             scale = 10, labels = c(0, "10 km"), cex = 0.6, height = 0.02)
+ plot(ny_data_r, type = observed ~ unit,
+      main = "Aggregated over all age groups",
+      population = rowSums(poprbyg_ordered)/100000 * (nrow(ny_data_all)/12), # per year
+      labels = list(cex = 0.8), sp.layout = scalebar)
+ 
+ 
+ all_values <- unlist(lapply(AGE_GROUP, function(g) {
+  stsObj <- ny_data_rbyg[[g]]
+  observed(stsObj)
+}))
+
+range_values <- range(all_values, na.rm = TRUE)
+
+ 
+ ## group-specific maps
+ incidence_maps <- lapply(AGE_GROUP, function (g) {
+   stsObj <- ny_data_rbyg[[g]]
+   plot(stsObj, type = observed ~ unit,
+        population = pop2020[,g]/100000 * (nrow(stsObj)/12),
+        labels = F, main = as.character(g))
+ })
+ if (require("gridExtra")) {
+   grid.arrange(grobs = incidence_maps, nrow = 2, ncol = 3)
+ } else {
+   warning("install package \"gridExtra\" to plot all maps on one page")
+   plot(incidence_maps[[1]])
+ }
+ 
+ 
+ 
+##### CONTACT DATA 
+ 
+Cgrouped <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts/contact_matrix.rds")
+
+## the row-normalized version
+Cgrouped_norm <- Cgrouped / rowSums(Cgrouped)
+ 
+## for the no-mixing model: diagonal contact matrix (no mixing)
+Cgrouped_AR <- structure(diag(ncol(Cgrouped)), dimnames = dimnames(Cgrouped))
+ 
+
+### plot the contact matrix
+ 
+ 
+## aggregated to the six age groups
+plotC(log10(Cgrouped))
+ 
+ ## power-adjustment of the contact matrix
+ powerC <- make_powerC(Cgrouped_norm, truncate = TRUE)
+ powerC(0.5)
+ if (require("gridExtra"))
+   grid.arrange(grobs = lapply(c(0, 0.5, 1, 2), function (power)
+     plotC(round(powerC(power), 7), main = bquote(kappa == .(power)),
+           at = seq(0, 1, length.out = 15 + 2))))
+ 
+
+
+```
+
+
+
+ 

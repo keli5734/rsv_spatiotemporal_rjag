@@ -513,6 +513,8 @@ for (i in 1:length(AGE_GROUP)) {
 }
 names(ny_data_rbyg) <- AGE_GROUP
 
+#saveRDS(ny_data_rbyg, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/ny_data_rbyg.rds")
+
 negb_matrix_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/expanded_negb_matrix_distance_weights_NY_state.rds") # expanded
 population_estimate_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/population_estimate_matrix_county_NY_state.rds")
  
@@ -526,6 +528,7 @@ ny_data_all <- sts(
   neighbourhood = negb_matrix_all
 )
 
+#saveRDS(ny_data_all, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/ny_data_all.rds")
 
 observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/observed_data_county_NY_state.rds")
 colnames(observed_data) <- paste0(colnames(observed_data), " County")
@@ -537,10 +540,6 @@ population <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14//popu
 populationFrac <- populationFrac[, counties_names]
 populaiton <- population[, counties_names]
 
-# # Assuming your original matrix is 'mat' (48x62)
-# populationFrac <- apply(populationFrac, 2, function(x) rep(x, each = 2, length.out = 120))
-# population <- apply(population, 2, function(x) rep(x, each = 2, length.out = 120))
- 
 
 map_input <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/sts_map_county_level_NY_state.rds")
 subset_spdf <- map_input[map_input@data$County %in% NAMES_COUNTIES, ]
@@ -560,12 +559,9 @@ ny_data_r <- sts(observed = observed_data,
                      #population = population,
                      neighbourhood = neighborhood_mat
                     )
+#saveRDS(ny_data_r, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/ny_data_r.rds")
 
-
-# saveRDS(ny_data_rbyg, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_rbyg.rds")
-# saveRDS(ny_data_all, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_all.rds")
-# saveRDS(ny_data_r, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_r.rds")
-
+ 
 ```
 
 

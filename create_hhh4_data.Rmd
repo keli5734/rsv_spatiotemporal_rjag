@@ -199,7 +199,8 @@ observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rs
 # saveRDS(weight_matrix, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
 
 
-original_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
+original_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4/negb_matrix_hop_counts_NY_state.rds")
+  #readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
 
  
 
@@ -241,7 +242,7 @@ colnames(expanded_matrix) <- colnames(observed_data)
 rownames(expanded_matrix) <- colnames(observed_data)
 
 
-# saveRDS(expanded_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/expanded_negb_matrix_distance_weights_NY_state.rds")
+# saveRDS(expanded_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/expanded_negb_matrix_counts_NY_state.rds")
 
 ```
 
@@ -450,7 +451,8 @@ observed_list[[i]] <- selected_columns
  
 
 # negb_matrix 
-negb_matrix_age <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
+negb_matrix_age <-  readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4/negb_matrix_hop_counts_NY_state.rds")
+#readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
 negb_matrix_age <- negb_matrix_age[selected_counties,selected_counties]
 
  
@@ -515,7 +517,7 @@ names(ny_data_rbyg) <- AGE_GROUP
 
 #saveRDS(ny_data_rbyg, "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/ny_data_rbyg.rds")
 
-negb_matrix_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/expanded_negb_matrix_distance_weights_NY_state.rds") # expanded
+negb_matrix_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/expanded_negb_matrix_counts_NY_state.rds") # expanded
 population_estimate_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/population_estimate_matrix_county_NY_state.rds")
  
 
@@ -547,7 +549,7 @@ subset_spdf <- map_input[map_input@data$County %in% NAMES_COUNTIES, ]
 row.names(subset_spdf) <- colnames(observed_data)
 subset_spdf@data$County <- colnames(observed_data)
 epoch_vector <- seq(1:120)
-neighborhood_mat <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/negb_matrix_distance_weights_NY_state.rds")
+neighborhood_mat <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4/negb_matrix_hop_counts_NY_state.rds")
 neighborhood_mat <- neighborhood_mat[counties_names, counties_names]
 
 ny_data_r <- sts(observed = observed_data,
@@ -569,20 +571,20 @@ ny_data_r <- sts(observed = observed_data,
 ```{r, data visulize, warning= FALSE}
 library("hhh4contacts")
 
-ny_data_rbyg <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_rbyg.rds")
-ny_data_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_all.rds")
-ny_data_r <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/ny_data_r.rds")
+ny_data_rbyg <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/ny_data_rbyg.rds")
+ny_data_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/ny_data_all.rds")
+ny_data_r <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/ny_data_r.rds")
 
 AGE_GROUP <- names(ny_data_rbyg)
 
 
  ## overall time series of counts
  plot(ny_data_all, type = observed ~ time,
-      main = "Aggregated over all counties and age groups")
+      main = "Aggregated over all counties and age groups", ylim = c(0,2000))
  
  ## group-specific time series
  {
- par(mfrow = c(2,3), las = 1)
+ par(mfrow = c(2,2), las = 1)
  for (g in AGE_GROUP){
    plot(ny_data_rbyg[[g]], type = observed ~ time, main = g, ylab = "No. hospitalizations")
  }
@@ -595,34 +597,22 @@ plot(ny_data_r, units = which(colSums(observed(ny_data_r)) > 500))
 
 
  ### plot disease incidence maps (mean yearly incidence)
- pop2020 <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts/pop2020.rds")[,-1]
- pop2020 <- tibble(`under 5` = pop2020$`under 5`, 
-                       `5-19` = pop2020$`5-9` + pop2020$`10-14` + pop2020$`15-19`, 
-                       `20-39` = pop2020$`20-24` + pop2020$`25-29` + pop2020$`30-34` + pop2020$`35-39`, 
-                       `40-59` = pop2020$`40-44` + pop2020$`45-49` + pop2020$`50-54` + pop2020$`55-59`, 
-                       `60 above` = sum(pop2020[,13:18]))
+ pop2020 <- population(ny_data_all)
+ pop2020 <- tibble::tibble(`under 5` = as.numeric(pop2020[1,1:9]),
+                       `5-19` = as.numeric(pop2020[1,10:18]),
+                       `20-59` =  as.numeric(pop2020[1,19:27]),
+                       `60 above` = sum(pop2020[1,28:36]))
  
- # AGE_GROUP = factor(c("under 5", 
- #                                       "5-19", 
- #                                       "20-39", 
- #                                       "40-59", 
- #                                       "60 above"), 
- #                   levels = c("under 5", 
- #                                       "5-19", 
- #                                       "20-39", 
- #                                       "40-59", 
- #                                       "60 above"))
- 
- 
+
  pop2020 <- as.matrix(pop2020)
  rownames(pop2020) <- rownames(ny_data_r@neighbourhood)
  
- (poprbyg <- aggregateCountsArray(pop2020, dim = 2, grouping = list(
+ poprbyg <- aggregateCountsArray(pop2020, dim = 2, grouping = list(
     "uner 5" = c("under 5"),
     "5-19" = c("5-19"),
-    "20-59" = c("20-39", "40-59"),
+    "20-59" = c("20-59"),
     "above 60" = c("60 above")
-)))
+))
  
  # Specify a custom order for the columns
 custom_order <- c("uner 5", "5-19", "20-59", "above 60")
@@ -655,7 +645,7 @@ range_values <- range(all_values, na.rm = TRUE)
         labels = F, main = as.character(g))
  })
  if (require("gridExtra")) {
-   grid.arrange(grobs = incidence_maps, nrow = 2, ncol = 3)
+   grid.arrange(grobs = incidence_maps, nrow = 2, ncol = 2)
  } else {
    warning("install package \"gridExtra\" to plot all maps on one page")
    plot(incidence_maps[[1]])
@@ -667,6 +657,39 @@ range_values <- range(all_values, na.rm = TRUE)
  
 Cgrouped <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts/contact_matrix.rds")
 
+#reshape contact matrix
+
+# Define the new age group mapping: <5, 5-19, 20-59, >60
+mapping <- list(
+  c(1),   # Combine rows/columns 1-4 into new group <5
+  c(2:4),  # Combine rows/columns 5-6 into new group 5-19
+  c(5:12),  # Combine rows/columns 7-10 into new group 20-59
+  c(13:18)  # Combine rows/columns 11-18 into new group >60
+)
+
+# Function to aggregate rows/columns based on mapping
+aggregate_matrix <- function(mat, mapping) {
+  new_size <- length(mapping)
+  aggregated_matrix <- matrix(0, nrow = new_size, ncol = new_size)
+  
+  for (i in seq_along(mapping)) {
+    for (j in seq_along(mapping)) {
+      # Sum the sub-matrix corresponding to the old age groups being aggregated
+      aggregated_matrix[i, j] <- sum(mat[mapping[[i]], mapping[[j]]])
+    }
+  }
+  return(aggregated_matrix)
+}
+
+# Apply the aggregation function
+contact_matrix_4x4 <- aggregate_matrix(Cgrouped, mapping)
+colnames(contact_matrix_4x4) = c("under 5", "5-19", "20-59", "60 above")
+rownames(contact_matrix_4x4) = c("under 5", "5-19", "20-59", "60 above")
+
+Cgrouped <- contact_matrix_4x4
+
+ 
+ 
 ## the row-normalized version
 Cgrouped_norm <- Cgrouped / rowSums(Cgrouped)
  
@@ -687,6 +710,205 @@ plotC(log10(Cgrouped))
    grid.arrange(grobs = lapply(c(0, 0.5, 1, 2), function (power)
      plotC(round(powerC(power), 7), main = bquote(kappa == .(power)),
            at = seq(0, 1, length.out = 15 + 2))))
+
+```
+
+
+```{r ,run model, warning=F}
+
+ ### MODEL FITS
+ ## We estimate various hhh4() models with spatial power-law weights,
+ ## population gravity and (power-adjusted) age-structured contact matrix
+ ###
+ 
+ ## we want the power law to act on (o+1)
+ neighbourhood(ny_data_all) <- neighbourhood(ny_data_all) + 1
+ 
+ 
+ ### setup time variables and indicators for group/district-specific effects
+ 
+DATAt <- list(t = epoch(ny_data_all) - 1)
+ 
+DISTRICTS <- unique(sub("(_.*|\\d{2}-\\d{2})", "", stratum(ny_data_all)))
+AGE_GROUP <- c("under 5", "5-19", "20-59", "60 above")
+
+ 
+ ## setup a model matrix with group indicators 
+ MMG <- sapply(AGE_GROUP, function (g) {
+   index <- which( sub("^[^_]+_(.*)", "\\1", stratum(ny_data_all)) == g)
+   res <- col(ny_data_all)
+   res[] <- res %in% index
+   res
+ }, simplify = FALSE, USE.NAMES = TRUE)
+ #str(MMG)
+ names(MMG) <- AGE_GROUP
+  
+ 
+ ## setup model matrix with district indicators
+ MMR <- sapply(DISTRICTS, function (r) {
+   index <- which( sub("(_.*|\\d{2}-\\d{2})", "", stratum(ny_data_all)) == r)
+   res <- col(ny_data_all)
+   res[] <- res %in% index
+   res
+ }, simplify = FALSE, USE.NAMES = TRUE)
+ #str(MMR)
+ names(MMR) <- DISTRICTS
+ 
+ ## setup model matrix of group-specific seasonal terms
+ MMgS <- with(c(MMG, DATAt), unlist(lapply(
+   X = as.character(AGE_GROUP),
+   FUN = function (g) {
+     gIndicator <- get(g)
+     res <- list(gIndicator * sin(2 * pi * t/12),
+                 gIndicator * cos(2 * pi * t/12))
+     names(res) <- paste0(c("sin", "cos"), "(2 * pi * t/12).", g)
+     res
+   }), recursive = FALSE, use.names = TRUE))
+ #str(MMgS)
+ 
+ GROUPS <-  as.character(AGE_GROUP)
+ 
+ ### specify the basic endemic model
+ 
+ 
+ ## endemic formula: ~group + district  + group:(sin+cos)
+ qGROUPS <- paste0("`", GROUPS, "`")
+ DISTRICTS_prime <- paste0("`", DISTRICTS, "`")
+ FGRXgS <- reformulate(c(qGROUPS[-1], DISTRICTS_prime[-1],
+                          paste0("`", names(MMgS), "`")),
+                          intercept = TRUE)
+ control0 <- list(
+   end = list(f = FGRXgS,
+              offset = population(ny_data_all) / rowSums(population(ny_data_all))),
+   family = factor( sub("^[^_]+_(.*)", "\\1", stratum(ny_data_all))), # group-specific dispersion
+   data = c(MMG, MMR, DATAt, MMgS)
+ )
+ 
+ ## fit the endemic-only model
+ ma0 <- hhh4(ny_data_all, control0)
+ 
+ 
+ ### add epidemic component with population gravity and POLYMOD contacts
+ 
+ ## epidemic formula: ~group + district + log(pop)
+ FGRpop <- reformulate(c(qGROUPS[-1], DISTRICTS_prime[-1], "log(pop)"),
+                        intercept = TRUE)
+ 
+ 
+ NDISTRICTS <- length(DISTRICTS)
+ ## fit the power-law model with the given contact matrix
+ ma_popPLC <- update(ma0,
+                     ne = list(
+                       f = FGRpop,
+                       weights = W_powerlaw(maxlag = 5, log = TRUE, normalize = FALSE,
+                                            initial = c("logd" = log(2))),
+                       scale = expandC(Cgrouped_norm, NDISTRICTS),
+                       normalize = TRUE),
+                     data = list(pop = population(ny_data_all)/rowSums(population(ny_data_all))))
+ 
+ ## model summary
+ summary(ma_popPLC, maxEV = TRUE, reparamPsi = TRUE,
+         amplitudeShift = TRUE, idx2Exp = TRUE)
+ 
+ 
+ 
+ ### alternative spatial transmission weights
+ ### (here still without power-adjustment of C)
+ 
+ ## a group-specific power law
+ rho <- coef(ma_popPLC, se = TRUE, idx2Exp = TRUE)["exp(neweights.logd)",]
+ PLgroups <- factor(sub("^[^_]+_(.*)", "\\1", stratum(ny_data_all)))
+ levels(PLgroups)[2:3] <- paste0(levels(PLgroups)[2:3], collapse = " & ")
+ levels(PLgroups)
+ WPLgroups <- addGroups2WFUN(WFUN = ma_popPLC$control$ne$weights,
+                             groups = PLgroups)
+ ma_popGPLC <- update(ma_popPLC, ne = list(weights = WPLgroups))
+ rho_groups <- coef(ma_popGPLC, se = TRUE, idx2Exp = TRUE)[
+   paste0("exp(neweights.", levels(PLgroups), ")"),]
+ rho_groups
+ 
+ ## unconstrained spatial transmission weights
+ ma_popNPC <- update(ma_popPLC,
+                     ne = list(weights = W_np(maxlag = 2, normalize = FALSE)))
+ 
+ ## plot the power laws and the unconstrained weights
+ par(mfrow = c(1,1))
+ plot(1:5, (1:5)^-rho[1], type = "b", lwd = 3, pch = 19,
+      xlab = "adjacency order", ylab = "weight", xaxt = "n")
+ axis(1, at = 1:5, labels = 0:4)
+ matlines(1:5, sapply(rho_groups[,1], function (rho) (1:5)^-rho),
+          type = "l", lwd = 2, lty = 2:6, col = 2:6)
+ points(1:5, c(1, exp(coefW(ma_popNPC))), pch = 15, lwd = 2)
+ ## Note: these were still models without power-adjustment of C,
+ ##       so the results are different from what is reported in the paper
+ 
+ 
+ 
+ ### fit models with alternative contact structures
+ 
+ ## no mixing
+ ma_popPLAR <- update(ma_popPLC,
+                      ne = list(scale = expandC(Cgrouped_AR, NDISTRICTS)),
+                      use.estimates = FALSE)
+ 
+ ## homogeneous mixing
+ ma_popPLhom <- update(ma_popPLC,
+                       ne = list(scale = NULL), # C = 1
+                       use.estimates = FALSE)
+ 
+ ## AIC comparison
+ AIC(ma0, ma_popPLhom, ma_popPLAR, ma_popPLC)
+ 
+ 
+ 
+ ### fit power-adjusted contact matrix via profile likelihood
+ ### CAVE: this takes a while (approx. 3 minutes)
+ 
+ ma_popPLCpower <- fitC(ma_popPLC, Cgrouped, normalize = TRUE, truncate = TRUE)
+ 
+ ## AIC comparison
+ AIC(ma_popPLC, ma_popPLCpower)
+ 
+ ## model summary
+ summary(ma_popPLCpower, maxEV = TRUE, reparamPsi = TRUE,
+         amplitudeShift = TRUE, idx2Exp = TRUE)
+ 
+ 
+ 
+ ### plot fitted values
+ 
+ ## overall fit
+ plotHHH4_fitted_groups(ma_popPLC,
+                        groups = sub("(_.*|\\d{2}-\\d{2})", "", stratum(ny_data_all)), total = TRUE, pch = 20,
+                        legend.args = list(legend = c("from other age groups", "within age group", "endemic")))
+ 
+ ## by age group
+ plotHHH4_fitted_groups(ma_popPLC,
+                        groups = sub("^[^_]+_(.*)", "\\1", stratum(ny_data_all)), units = NULL, pch = 20, legend = 2,
+                        legend.args = list(legend = c("from other age groups", "within age group", "endemic")))
+ 
+ ## by district
+ plotHHH4_fitted_groups(ma_popPLC,
+                        groups = factor(sub("(_.*|\\d{2}-\\d{2})", "", stratum(ny_data_all)), levels = DISTRICTS),
+                        names = ny_data_r@map@data[DISTRICTS,"County"], units = NULL,
+                        legend = 4, legend.args = list(cex = 0.8,
+                                                       legend = c("from other districts", "within district", "endemic")),
+                        pch = 20, ylim = c(0,300))
+ 
+ 
+ 
+ ### plot endemic seasonality
+ 
+ set.seed(131015)  # confidence intervals involve simulations
+ plotHHH4_season_groups(ma_popPLC,
+                        component = "end", seasonStart = 1,
+                        col = c("#D53E4F", "#FC8D59", "#FEE08B", "#E6F598", "#99D594", "#3288BD"),
+                        xlab = "calendar month", ylab = "multiplicative effect",
+                        xaxt = "n", xaxs = "i", yaxs = "i", ylim = c(0, 8))
+ ## add x-axis
+ weeks2mark <- seq.int(27, 27+52, by = 4)  # axTicks(1)
+ axis(1, at = 0:100, labels = FALSE, tcl = NA)
+ axis(1, at = weeks2mark, labels = weeks2mark %% 52)
  
 
 
@@ -694,4 +916,3 @@ plotC(log10(Cgrouped))
 
 
 
- 

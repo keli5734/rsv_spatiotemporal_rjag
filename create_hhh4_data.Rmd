@@ -385,6 +385,12 @@ age_distribution_by_county_summary <- age_distribution_by_county %>%
 
 colnames(age_distribution_by_county_summary) <- c("county_name", "AGE_GROUP", "population")
 
+selected_counties <- paste0(c("Bronx", "Kings", "Nassau", "New York", 
+                              "Queens", "Richmond", "Rockland", "Suffolk", "Westchester"), " County")
+
+age_distribution_by_county_summary <- age_distribution_by_county_summary %>% 
+  filter(county_name  %in% selected_counties)
+
 #head(age_distribution_by_county_summary)
 
 age_distribution_by_county_fraction <- age_distribution_by_county_summary %>% 
@@ -394,7 +400,7 @@ age_distribution_by_county_fraction <- age_distribution_by_county_summary %>%
   arrange(AGE_GROUP)
 
 
-observed_data <- readRDS( "/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/observed_data_county_NY_state.rds")
+observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/observed_data_county_NY_state.rds")
 
 population_fraction_matrix <- matrix(0, nrow = dim(observed_data)[1], ncol = dim(observed_data)[2])
 population_estimate_matrix <- matrix(0, nrow = dim(observed_data)[1], ncol = dim(observed_data)[2])
@@ -409,8 +415,8 @@ colnames(population_estimate_matrix) <- colnames(observed_data)
 
 
 
-# saveRDS(population_fraction_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_fraction_matrix_county_NY_state.rds")
-# saveRDS(population_estimate_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_estimate_matrix_county_NY_state.rds")
+# saveRDS(population_fraction_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/population_fraction_matrix_county_NY_state.rds")
+# saveRDS(population_estimate_matrix,"/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/population_estimate_matrix_county_NY_state.rds")
 
  
 ```
@@ -418,19 +424,17 @@ colnames(population_estimate_matrix) <- colnames(observed_data)
 
 ```{r, forming list, warning=FALSE}
 
-# Here we have 18 age groups
-observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/observed_data_county_NY_state.rds")
+# Here we have 4 age groups
+observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/observed_data_county_NY_state.rds")
  
 
 AGE_GROUP = factor(c("under 5", 
                                        "5-19", 
-                                       "20-39", 
-                                       "40-59", 
+                                       "20-59", 
                                        "60 above"), 
                    levels = c("under 5", 
                                        "5-19", 
-                                       "20-39", 
-                                       "40-59", 
+                                       "20-59", 
                                        "60 above"))
 
 
@@ -447,10 +451,10 @@ observed_list[[i]] <- selected_columns
 
 # negb_matrix 
 negb_matrix_age <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/negb_matrix_distance_weights_NY_state.rds")
-
+negb_matrix_age <- negb_matrix_age[selected_counties,selected_counties]
 
  
-population_fraction_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_fraction_matrix_county_NY_state.rds")
+population_fraction_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/population_fraction_matrix_county_NY_state.rds")
 population_fraction_list <- list()
 for(i in 1:length(AGE_GROUP)){
 selected_columns <- population_fraction_matrix[, grep(paste0(AGE_GROUP[i],"$"), colnames(population_fraction_matrix))]
@@ -459,7 +463,7 @@ population_fraction_list[[i]] <- selected_columns
 }
  
 
-population_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_estimate_matrix_county_NY_state.rds")
+population_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/population_estimate_matrix_county_NY_state.rds")
 population_list <- list()
 for(i in 1:length(AGE_GROUP)){
 selected_columns <- population_matrix[, grep(paste0(AGE_GROUP[i],"$"), colnames(population_matrix))]
@@ -469,15 +473,18 @@ population_list[[i]] <- selected_columns
  
 counties_names <-  colnames(population_list[[1]])
 
+NAMES_COUNTIES <- c("Bronx","Kings","Nassau", "New York", "Queens", "Richmond", "Rockland","Suffolk", "Westchester")
 
 map_input <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4/sts_map_county_level_NY_state.rds")
-row.names(map_input) <- counties_names
-map_input@data$County <- counties_names
+subset_spdf <- map_input[map_input@data$County %in% NAMES_COUNTIES, ]
+
+row.names(subset_spdf) <- counties_names
+subset_spdf@data$County <- counties_names
 
 map_list <- list()
 for(i in 1:length(AGE_GROUP)){
-  map_input@data$population <- population_list[[i]][1,]
-  map_list[[i]] <- map_input
+  subset_spdf@data$population <- population_list[[i]][1,]
+  map_list[[i]] <- subset_spdf
 }
 
 
@@ -486,12 +493,13 @@ for(i in 1:length(AGE_GROUP)){
 
 
 ```{r, create list of NGROUPS "sts" objects, warning=FALSE}
+library(surveillance)
 
 epoch_vector <- seq(1:120)
 
 ny_data_rbyg <- list()
 
-# Loop through 1 to 18 to populate the list
+# Loop through 1 to 4 (age groups) to populate the list
 for (i in 1:length(AGE_GROUP)) {
   ny_data_rbyg[[AGE_GROUP[i]]] <- sts(
     observed = observed_list[[i]],
@@ -505,8 +513,9 @@ for (i in 1:length(AGE_GROUP)) {
 }
 names(ny_data_rbyg) <- AGE_GROUP
 
-negb_matrix_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/expanded_negb_matrix_distance_weights_NY_state.rds") # expanded
-population_estimate_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4contacts_04_14/population_estimate_matrix_county_NY_state.rds")
+negb_matrix_all <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/expanded_negb_matrix_distance_weights_NY_state.rds") # expanded
+population_estimate_matrix <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/rjags/rjag_rsv_spatiotemporal/hhh4contacts/population_estimate_matrix_county_NY_state.rds")
+ 
 
 ny_data_all <- sts(
   observed = observed_data, 
@@ -520,9 +529,13 @@ ny_data_all <- sts(
 
 observed_data <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/observed_data_county_NY_state.rds")
 colnames(observed_data) <- paste0(colnames(observed_data), " County")
+observed_data <- observed_data[, counties_names]
 
 populationFrac <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/population_fraction_matrix_county_NY_state.rds")
 population <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14//population_estimate_matrix_county_NY_state.rds")
+
+populationFrac <- populationFrac[, counties_names]
+populaiton <- population[, counties_names]
 
 # # Assuming your original matrix is 'mat' (48x62)
 # populationFrac <- apply(populationFrac, 2, function(x) rep(x, each = 2, length.out = 120))
@@ -530,16 +543,19 @@ population <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14//popu
  
 
 map_input <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/sts_map_county_level_NY_state.rds")
-row.names(map_input) <- colnames(observed_data)
-map_input@data$County <- colnames(observed_data)
+subset_spdf <- map_input[map_input@data$County %in% NAMES_COUNTIES, ]
+
+row.names(subset_spdf) <- colnames(observed_data)
+subset_spdf@data$County <- colnames(observed_data)
 epoch_vector <- seq(1:120)
 neighborhood_mat <- readRDS("/Volumes/HCUPdata-CC0941-MEDSPH/Rcode_Ke/hhh4_04_14/negb_matrix_distance_weights_NY_state.rds")
+neighborhood_mat <- neighborhood_mat[counties_names, counties_names]
 
 ny_data_r <- sts(observed = observed_data,
                      start = c(2004,7),
                      frequency = 12,
                      epoch = epoch_vector,
-                     map = map_input,
+                     map = subset_spdf,
                      populationFrac = populationFrac,
                      #population = population,
                      neighbourhood = neighborhood_mat
